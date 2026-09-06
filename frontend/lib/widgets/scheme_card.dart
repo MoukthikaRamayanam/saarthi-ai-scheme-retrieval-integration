@@ -1,61 +1,90 @@
 import 'package:flutter/material.dart';
+
 import '../models/scheme_result.dart';
+import '../screens/document_upload_screen.dart';
 import '../services/api_service.dart';
 
 class SchemeCard extends StatefulWidget {
   final SchemeResult scheme;
   final String userQuery;
 
-  const SchemeCard({
-    super.key,
-    required this.scheme,
-    required this.userQuery,
-  });
+  const SchemeCard({super.key, required this.scheme, required this.userQuery});
 
   @override
   State<SchemeCard> createState() => _SchemeCardState();
 }
 
 class _SchemeCardState extends State<SchemeCard> {
-  String? _selectedFeedback; // 'relevant' or 'not_relevant'
+  String? _selectedFeedback;
   bool _isSubmittingFeedback = false;
 
+  static const Color primaryTeal = Color(0xFF0B4F4A);
+
   Future<void> _sendFeedback(String feedbackType) async {
-    if (_isSubmittingFeedback || _selectedFeedback == feedbackType) return;
+    if (_isSubmittingFeedback || _selectedFeedback == feedbackType) {
+      return;
+    }
 
     setState(() {
       _selectedFeedback = feedbackType;
       _isSubmittingFeedback = true;
     });
 
-    await ApiService().submitFeedback(
-      FeedbackRequest(
-        query: widget.userQuery,
-        schemeId: widget.scheme.schemeId,
-        feedback: feedbackType,
-      ),
-    );
+    try {
+      await ApiService().submitFeedback(
+        FeedbackRequest(
+          query: widget.userQuery,
+          schemeId: widget.scheme.schemeId,
+          feedback: feedbackType,
+        ),
+      );
 
-    if (mounted) {
-      setState(() {
-        _isSubmittingFeedback = false;
-      });
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             feedbackType == 'relevant'
-                ? 'Thanks! Marked as Relevant to help refine future ranking.'
-                : 'Feedback recorded: Marked as Not Relevant.',
+                ? 'Thanks! Marked as Relevant.'
+                : 'Feedback recorded: Not Relevant.',
           ),
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
           backgroundColor: feedbackType == 'relevant'
-              ? const Color(0xFF0B4F4A)
+              ? primaryTeal
               : const Color(0xFF64748B),
         ),
       );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not submit feedback.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingFeedback = false;
+        });
+      }
     }
+  }
+
+  void _continueToDocumentUpload(BuildContext ctx) {
+    Navigator.pop(ctx);
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DocumentUploadScreen(
+          schemeName: widget.scheme.schemeName,
+          schemeId: widget.scheme.schemeId,
+          requiredDocuments: widget.scheme.requiredDocuments ?? const [],
+        ),
+      ),
+    );
   }
 
   void _showDetailsBottomSheet(BuildContext context) {
@@ -76,13 +105,12 @@ class _SchemeCardState extends State<SchemeCard> {
             bottom: MediaQuery.of(ctx).padding.bottom + 20,
           ),
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+            maxHeight: MediaQuery.of(ctx).size.height * 0.90,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Drag Handle
               Center(
                 child: Container(
                   width: 40,
@@ -93,9 +121,9 @@ class _SchemeCardState extends State<SchemeCard> {
                   ),
                 ),
               ),
+
               const SizedBox(height: 16),
 
-              // Title and Scheme ID
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -113,7 +141,8 @@ class _SchemeCardState extends State<SchemeCard> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Scheme ID: ${widget.scheme.schemeId} • State: ${widget.scheme.state ?? "All India"}',
+                          'Scheme ID: ${widget.scheme.schemeId} • '
+                          'State: ${widget.scheme.state ?? "All India"}',
                           style: const TextStyle(
                             fontSize: 12,
                             color: Color(0xFF64748B),
@@ -129,10 +158,12 @@ class _SchemeCardState extends State<SchemeCard> {
                   ),
                 ],
               ),
+
               const SizedBox(height: 12),
 
-              // Architectural Disclaimer Banner
+              // Semantic relevance warning
               Container(
+                width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFF7ED),
@@ -150,7 +181,9 @@ class _SchemeCardState extends State<SchemeCard> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Semantic Relevance Only: This ranking represents AI vector similarity to your stated needs. It does NOT constitute official eligibility approval.',
+                        'Semantic Relevance: This score shows how closely '
+                        'the scheme matches your stated needs. Eligibility '
+                        'must be verified separately using official scheme rules.',
                         style: TextStyle(
                           fontSize: 11.5,
                           color: Color(0xFF9A3412),
@@ -162,75 +195,165 @@ class _SchemeCardState extends State<SchemeCard> {
                   ],
                 ),
               ),
+
               const SizedBox(height: 16),
 
-              // Scrollable Details
               Flexible(
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (widget.scheme.objective != null) ...[
+                      if (widget.scheme.objective != null &&
+                          widget.scheme.objective!.isNotEmpty) ...[
                         _buildDetailSection(
                           icon: Icons.flag_rounded,
                           title: 'Scheme Objective',
                           content: widget.scheme.objective!,
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 16),
                       ],
-                      if (widget.scheme.benefits != null) ...[
+
+                      if (widget.scheme.benefits != null &&
+                          widget.scheme.benefits!.isNotEmpty) ...[
                         _buildDetailSection(
                           icon: Icons.card_giftcard_rounded,
                           title: 'Assistance & Benefits',
                           content: widget.scheme.benefits!,
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 16),
                       ],
-                      if (widget.scheme.targetBeneficiary != null) ...[
+
+                      if (widget.scheme.targetBeneficiary != null &&
+                          widget.scheme.targetBeneficiary!.isNotEmpty) ...[
                         _buildDetailSection(
                           icon: Icons.people_alt_rounded,
                           title: 'Target Beneficiaries',
                           content: widget.scheme.targetBeneficiary!,
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 16),
                       ],
+
                       if (widget.scheme.businessTypes != null &&
                           widget.scheme.businessTypes!.isNotEmpty) ...[
-                        const Text(
-                          'Supported Business Types',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF334155),
+                        _buildBusinessTypes(),
+                        const SizedBox(height: 18),
+                      ],
+
+                      // Eligibility rules
+                      if (widget.scheme.eligibilityRules != null &&
+                          widget.scheme.eligibilityRules!.isNotEmpty) ...[
+                        _buildListSection(
+                          icon: Icons.fact_check_outlined,
+                          title: 'Eligibility Rules',
+                          items: widget.scheme.eligibilityRules!,
+                        ),
+                        const SizedBox(height: 18),
+                      ] else ...[
+                        _buildUnavailableSection(
+                          icon: Icons.fact_check_outlined,
+                          title: 'Eligibility Rules',
+                          message: 'Verified eligibility rules are not available for this scheme yet.',
+                        ),
+                        const SizedBox(height: 18),
+                      ],
+
+                      // Required documents
+                      if (widget.scheme.requiredDocuments != null &&
+                          widget.scheme.requiredDocuments!.isNotEmpty) ...[
+                        _buildListSection(
+                          icon: Icons.description_outlined,
+                          title: 'Required Documents',
+                          items: widget.scheme.requiredDocuments!,
+                        ),
+                        const SizedBox(height: 18),
+                      ] else ...[
+                        _buildUnavailableSection(
+                          icon: Icons.description_outlined,
+                          title: 'Required Documents',
+                          message: 'Verified document requirements are not available for this scheme yet.',
+                        ),
+                        const SizedBox(height: 18),
+                      ],
+
+                      // Official link
+                      if (widget.scheme.officialLink != null &&
+                          widget.scheme.officialLink!.isNotEmpty) ...[
+                        _buildOfficialLink(widget.scheme.officialLink!),
+                        const SizedBox(height: 18),
+                      ],
+
+                      // Architecture note
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFDBEAFE)),
+                        ),
+                        child: const Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.account_tree_outlined,
+                              size: 18,
+                              color: Color(0xFF1D4ED8),
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Next step: documents can be uploaded and '
+                                'passed to the OCR module. OCR and final '
+                                'eligibility decisions are handled separately.',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  height: 1.4,
+                                  color: Color(0xFF1E40AF),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _continueToDocumentUpload(ctx),
+                          icon: const Icon(Icons.upload_file_rounded, size: 18),
+                          label: const Text('Continue to Document Upload'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryTeal,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            textStyle: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: widget.scheme.businessTypes!
-                              .map(
-                                (b) => Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE0F2F1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    b,
-                                    style: const TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF004D40),
-                                    ),
-                                  ),
-                                ),
-                              )
-                              .toList(),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      const Center(
+                        child: Text(
+                          'Stops before OCR processing',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            color: Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                        const SizedBox(height: 14),
-                      ],
+                      ),
+
+                      const SizedBox(height: 4),
                     ],
                   ),
                 ),
@@ -250,27 +373,176 @@ class _SchemeCardState extends State<SchemeCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(icon, size: 16, color: const Color(0xFF0B4F4A)),
-            const SizedBox(width: 6),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1E293B),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 5),
+        _buildSectionTitle(icon: icon, title: title),
+        const SizedBox(height: 6),
         Text(
           content,
           style: const TextStyle(
             fontSize: 12.5,
             color: Color(0xFF475569),
-            height: 1.4,
+            height: 1.45,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildListSection({
+    required IconData icon,
+    required String title,
+    required List<String> items,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(icon: icon, title: title),
+        const SizedBox(height: 8),
+        ...items.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 7),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 3),
+                  child: Icon(
+                    Icons.check_circle_outline_rounded,
+                    size: 15,
+                    color: primaryTeal,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    item,
+                    style: const TextStyle(
+                      fontSize: 12.3,
+                      color: Color(0xFF475569),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildUnavailableSection({
+    required IconData icon,
+    required String title,
+    required String message,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(icon: icon, title: title),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Text(
+            message,
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: Color(0xFF64748B),
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionTitle({required IconData icon, required String title}) {
+    return Row(
+      children: [
+        Icon(icon, size: 17, color: primaryTeal),
+        const SizedBox(width: 7),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1E293B),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBusinessTypes() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(
+          icon: Icons.business_center_outlined,
+          title: 'Supported Business Types',
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: widget.scheme.businessTypes!
+              .map(
+                (business) => Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE0F2F1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    business,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF004D40),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOfficialLink(String link) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(
+          icon: Icons.language_rounded,
+          title: 'Official Scheme Portal',
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(11),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0FDFA),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFCCFBF1)),
+          ),
+          child: SelectableText(
+            link,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF0F766E),
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ],
@@ -279,8 +551,7 @@ class _SchemeCardState extends State<SchemeCard> {
 
   @override
   Widget build(BuildContext context) {
-    const primaryTeal = Color(0xFF0B4F4A);
-    final badgeColorInfo = _getBadgeColors(widget.scheme.matchBadge);
+    final badgeColors = _getBadgeColors(widget.scheme.matchBadge);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -301,18 +572,19 @@ class _SchemeCardState extends State<SchemeCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Row: Match Badge & Relevance Score (Wrap-safe)
             Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 8,
               runSpacing: 8,
               children: [
-                // Badge: High Match / Good Match / Relevant
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4.5,
+                  ),
                   decoration: BoxDecoration(
-                    color: badgeColorInfo['bg'],
+                    color: badgeColors['bg'],
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Row(
@@ -321,7 +593,7 @@ class _SchemeCardState extends State<SchemeCard> {
                       Icon(
                         Icons.auto_awesome,
                         size: 13,
-                        color: badgeColorInfo['fg'],
+                        color: badgeColors['fg'],
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -329,21 +601,19 @@ class _SchemeCardState extends State<SchemeCard> {
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
-                          color: badgeColorInfo['fg'],
+                          color: badgeColors['fg'],
                         ),
                       ),
                     ],
                   ),
                 ),
-
-                // Relevance Score as percentage (Strictly NOT eligibility)
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(
                       Icons.insights_rounded,
                       size: 15,
-                      color: Color(0xFF0B4F4A),
+                      color: primaryTeal,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -351,16 +621,16 @@ class _SchemeCardState extends State<SchemeCard> {
                       style: const TextStyle(
                         fontSize: 13.5,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF0B4F4A),
+                        color: primaryTeal,
                       ),
                     ),
                   ],
                 ),
               ],
             ),
+
             const SizedBox(height: 12),
 
-            // Scheme Name
             Text(
               widget.scheme.schemeName,
               style: const TextStyle(
@@ -370,9 +640,9 @@ class _SchemeCardState extends State<SchemeCard> {
                 height: 1.25,
               ),
             ),
+
             const SizedBox(height: 10),
 
-            // "Why this scheme matched" Section
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -434,17 +704,15 @@ class _SchemeCardState extends State<SchemeCard> {
                 ],
               ),
             ),
+
             const SizedBox(height: 14),
 
-            // Bottom Actions: View Details + Feedback Buttons
-            // Wrap ensures no horizontal overflow on narrow devices
             Wrap(
               alignment: WrapAlignment.spaceBetween,
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 8,
               runSpacing: 8,
               children: [
-                // View Details Button
                 OutlinedButton.icon(
                   onPressed: () => _showDetailsBottomSheet(context),
                   icon: const Icon(Icons.visibility_outlined, size: 14),
@@ -452,7 +720,10 @@ class _SchemeCardState extends State<SchemeCard> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: primaryTeal,
                     side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     textStyle: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -463,83 +734,19 @@ class _SchemeCardState extends State<SchemeCard> {
                   ),
                 ),
 
-                // Feedback buttons row
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Feedback: 👍 Relevant
-                    InkWell(
-                      onTap: () => _sendFeedback('relevant'),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _selectedFeedback == 'relevant'
-                              ? const Color(0xFFE0F2F1)
-                              : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _selectedFeedback == 'relevant'
-                                ? const Color(0xFF004D40)
-                                : Colors.transparent,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('👍', style: TextStyle(fontSize: 12)),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Relevant',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: _selectedFeedback == 'relevant'
-                                    ? const Color(0xFF004D40)
-                                    : const Color(0xFF475569),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    _buildFeedbackButton(
+                      emoji: '👍',
+                      label: 'Relevant',
+                      feedbackType: 'relevant',
                     ),
                     const SizedBox(width: 6),
-
-                    // Feedback: 👎 Not Relevant
-                    InkWell(
-                      onTap: () => _sendFeedback('not_relevant'),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: _selectedFeedback == 'not_relevant'
-                              ? const Color(0xFFFFEBEE)
-                              : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _selectedFeedback == 'not_relevant'
-                                ? const Color(0xFFC62828)
-                                : Colors.transparent,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text('👎', style: TextStyle(fontSize: 12)),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Not Relevant',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w600,
-                                color: _selectedFeedback == 'not_relevant'
-                                    ? const Color(0xFFC62828)
-                                    : const Color(0xFF475569),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    _buildFeedbackButton(
+                      emoji: '👎',
+                      label: 'Not Relevant',
+                      feedbackType: 'not_relevant',
                     ),
                   ],
                 ),
@@ -551,23 +758,64 @@ class _SchemeCardState extends State<SchemeCard> {
     );
   }
 
+  Widget _buildFeedbackButton({
+    required String emoji,
+    required String label,
+    required String feedbackType,
+  }) {
+    final selected = _selectedFeedback == feedbackType;
+
+    final isRelevant = feedbackType == 'relevant';
+
+    final selectedBackground = isRelevant
+        ? const Color(0xFFE0F2F1)
+        : const Color(0xFFFFEBEE);
+
+    final selectedColor = isRelevant
+        ? const Color(0xFF004D40)
+        : const Color(0xFFC62828);
+
+    return InkWell(
+      onTap: _isSubmittingFeedback ? null : () => _sendFeedback(feedbackType),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? selectedBackground : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? selectedColor : Colors.transparent,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 12)),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: selected ? selectedColor : const Color(0xFF475569),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Map<String, Color> _getBadgeColors(String badge) {
     switch (badge) {
       case 'High Match':
-        return {
-          'bg': const Color(0xFFE0F2F1),
-          'fg': const Color(0xFF00695C),
-        };
+        return {'bg': const Color(0xFFE0F2F1), 'fg': const Color(0xFF00695C)};
+
       case 'Good Match':
-        return {
-          'bg': const Color(0xFFFFF3E0),
-          'fg': const Color(0xFFE65100),
-        };
+        return {'bg': const Color(0xFFFFF3E0), 'fg': const Color(0xFFE65100)};
+
       default:
-        return {
-          'bg': const Color(0xFFE0F7FA),
-          'fg': const Color(0xFF00838F),
-        };
+        return {'bg': const Color(0xFFE0F7FA), 'fg': const Color(0xFF00838F)};
     }
   }
 }

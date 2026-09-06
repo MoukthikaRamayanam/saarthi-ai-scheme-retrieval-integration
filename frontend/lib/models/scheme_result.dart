@@ -49,11 +49,17 @@ class SchemeResult {
   final String schemeName;
   final double relevanceScore;
   final List<String> whyMatched;
+
   final String? objective;
   final String? benefits;
   final String? targetBeneficiary;
   final List<String>? businessTypes;
   final String? state;
+
+  // New fields for Scheme Details flow
+  final List<String>? eligibilityRules;
+  final List<String>? requiredDocuments;
+  final String? officialLink;
 
   SchemeResult({
     required this.schemeId,
@@ -65,9 +71,12 @@ class SchemeResult {
     this.targetBeneficiary,
     this.businessTypes,
     this.state,
+    this.eligibilityRules,
+    this.requiredDocuments,
+    this.officialLink,
   });
 
-  /// STRICT RULE: Never label as "eligibility". It represents semantic relevance only.
+  /// Semantic relevance only — NOT eligibility.
   String get relevancePercentage {
     final pct = (relevanceScore * 100).clamp(0, 100).toStringAsFixed(0);
     return '$pct% Relevant';
@@ -87,18 +96,33 @@ class SchemeResult {
     return SchemeResult(
       schemeId: json['scheme_id'] ?? '',
       schemeName: json['scheme_name'] ?? 'Unknown Scheme',
-      relevanceScore: (json['relevance_score'] as num?)?.toDouble() ?? 0.0,
+      relevanceScore:
+          (json['relevance_score'] as num?)?.toDouble() ?? 0.0,
+
       whyMatched: (json['why_matched'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
+
       objective: json['objective'],
       benefits: json['benefits'],
       targetBeneficiary: json['target_beneficiary'],
+
       businessTypes: (json['business_types'] as List<dynamic>?)
           ?.map((e) => e.toString())
           .toList(),
+
       state: json['state'],
+
+      eligibilityRules: (json['eligibility_rules'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList(),
+
+      requiredDocuments: (json['required_documents'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList(),
+
+      officialLink: json['official_link'],
     );
   }
 }
